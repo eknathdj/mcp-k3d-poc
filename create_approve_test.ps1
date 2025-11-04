@@ -55,9 +55,28 @@ Write-Host "Checking k3d cluster list..."
 & k3d cluster list
 
 Write-Host "Updating kubectl config to use localhost..."
+
+# Get the k3d cluster port from the cluster list
+$clusterName = "sandbox-$($sandboxId.Substring(0,8))"
+$clusterJson = & k3d cluster list --output json
+$clusterData = $clusterJson | ConvertFrom-Json
+$clusterInfo = $clusterData | Where-Object { $_.name -eq $clusterName }
+$loadBalancerNode = $clusterInfo.nodes | Where-Object { $_.role -eq "loadbalancer" }
+$portMapping = $loadBalancerNode.portMappings.'6443/tcp'[0]
+$clusterPort = $portMapping.HostPort
+
+Write-Host "Cluster name: $clusterName"
+Write-Host "Cluster port: $clusterPort"
+
+# Fetch the kubeconfig and merge it into global config
 $sandboxKubeconfig = Invoke-RestMethod -Uri "$ServerUrl/get_kubeconfig/$sandboxId" -Method Get
-$sandboxKubeconfig.kubeconfig | Out-File -FilePath "$env:TEMP\sandbox-kubeconfig.yaml" -Encoding UTF8
-kubectl config use-context --kubeconfig="$env:TEMP\sandbox-kubeconfig.yaml" (kubectl config get-contexts --kubeconfig="$env:TEMP\sandbox-kubeconfig.yaml" -o name | Select-Object -First 1)
+$sandboxKubeconfig.kubeconfig | kubectl config view --kubeconfig=/dev/stdin --flatten --merge | kubectl config view --merge -
+
+# Update the cluster server URL in global kubectl config
+& kubectl config set-cluster $clusterName --server=https://127.0.0.1:$clusterPort
+
+# Switch to the new context
+& kubectl config use-context $clusterName
 
 Write-Host "Checking kubectl nodes..."
-& kubectl --kubeconfig="$env:TEMP\sandbox-kubeconfig.yaml" get nodes
+& kubectl get nodes
