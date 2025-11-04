@@ -1,0 +1,59 @@
+{
+  "tool_name": "mcp-sandbox",
+  "version": "0.1.0",
+  "description": "MCP server that provisions k3d sandboxes for dev/test",
+  "actions": [
+    {
+      "id": "create_sandbox",
+      "description": "Create ephemeral k3d sandbox cluster",
+      "inputs": {
+        "name": "string",
+        "servers": "int",
+        "agents": "int",
+        "ttl_minutes": "int",
+        "owner": "string"
+      },
+      "outputs": {
+        "sandbox_id": "string",
+        "status": "string"
+      }
+    },
+    {
+      "id": "get_kubeconfig",
+      "description": "Get a short-lived kubeconfig content for the sandbox",
+      "inputs": {
+        "sandbox_id": "string"
+      },
+      "outputs": {
+        "kubeconfig": "string"
+      }
+    },
+    {
+      "id": "run_test",
+      "description": "Run a named test suite on the sandbox",
+      "inputs": {
+        "sandbox_id": "string",
+        "test_id": "string"
+      },
+      "outputs": {
+        "rc": "int",
+        "out": "string",
+        "err": "string"
+      }
+    },
+    {
+      "id": "destroy_sandbox",
+      "description": "Destroy the sandbox cluster",
+      "inputs": {
+        "sandbox_id": "string"
+      },
+      "outputs": {
+        "status": "string"
+      }
+    }
+  ],
+  "requires_approval": [
+    "create_sandbox",
+    "destroy_sandbox"
+  ]
+}

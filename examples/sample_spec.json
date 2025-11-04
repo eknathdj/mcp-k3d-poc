@@ -1,0 +1,7 @@
+{
+  "name": "alice-test",
+  "servers": 1,
+  "agents": 1,
+  "ttl_minutes": 60,
+  "owner": "eknath@example.com"
+}
