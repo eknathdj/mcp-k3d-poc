@@ -153,6 +153,14 @@ def get_kubeconfig(sandbox_id: str):
     with open(path) as f:
         content = f.read()
     write_audit("user", "get_kubeconfig", {"sandbox_id": sandbox_id}, {"size": len(content)})
+@app.get("/list_active_sandboxes")
+def list_active_sandboxes():
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("SELECT id,name,status,created_at,expires_at FROM sandboxes WHERE status='ACTIVE' ORDER BY created_at DESC")
+    rows = c.fetchall()
+    conn.close()
+    return [{"id":row[0], "name":row[1], "status":row[2], "created_at":row[3], "expires_at":row[4]} for row in rows]
     return {"kubeconfig": content}
 
 class RunTestSpec(BaseModel):
