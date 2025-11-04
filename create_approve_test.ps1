@@ -68,18 +68,17 @@ $clusterPort = $portMapping.HostPort
 Write-Host "Cluster name: $clusterName"
 Write-Host "Cluster port: $clusterPort"
 
-# Fetch the kubeconfig and merge it into global config
+# Fetch the kubeconfig and set it as KUBECONFIG temporarily
 $sandboxKubeconfig = Invoke-RestMethod -Uri "$ServerUrl/get_kubeconfig/$sandboxId" -Method Get
-$sandboxKubeconfig.kubeconfig | Out-File -FilePath "$env:TEMP\sandbox.yaml" -Encoding UTF8
-& kubectl config view --kubeconfig="$env:TEMP\sandbox.yaml" --flatten | & kubectl config view --merge -
+$sandboxKubeconfig.kubeconfig | Out-File -FilePath "$env:TEMP\sandbox-kubeconfig.yaml" -Encoding UTF8
 
-# Update the cluster server URL in global kubectl config
-# Use the k3d generated cluster name
-$actualClusterName = "k3d-$clusterName"
-& kubectl config set-cluster $actualClusterName --server=https://127.0.0.1:$clusterPort
+# Update the server URL in the kubeconfig file directly
+$content = Get-Content "$env:TEMP\sandbox-kubeconfig.yaml" -Raw
+$content = $content -replace "https://host\.docker\.internal:\d+", "https://127.0.0.1:$clusterPort"
+$content | Out-File -FilePath "$env:TEMP\sandbox-kubeconfig.yaml" -Encoding UTF8
 
-# Switch to the new context
-& kubectl config use-context $actualClusterName
+# Set KUBECONFIG to use the modified kubeconfig
+$env:KUBECONFIG = "$env:TEMP\sandbox-kubeconfig.yaml"
 
 Write-Host "Checking kubectl nodes..."
 & kubectl get nodes
