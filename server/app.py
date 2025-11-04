@@ -2,13 +2,16 @@ import uvicorn
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 import subprocess, uuid, os, datetime, sqlite3, threading, json
-from prometheus_client import Counter, generate_latest
+from prometheus_client import Counter, generate_latest, REGISTRY
 
 BASE_DIR = os.path.dirname(__file__)
 DB_PATH = os.path.join(BASE_DIR, "mcp.db")
 KUBECONFIG_DIR = os.path.join(BASE_DIR, "kubeconfigs")
 os.makedirs(KUBECONFIG_DIR, exist_ok=True)
 
+# Clear registry to avoid duplication on reloads
+if 'mcp_create_requests_total' in REGISTRY._names_to_collectors:
+    REGISTRY.unregister(REGISTRY._names_to_collectors['mcp_create_requests_total'])
 create_counter = Counter('mcp_create_requests_total', 'Total create requests')
 
 app = FastAPI(title="MCP k3d Sandbox PoC")
