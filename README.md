@@ -154,12 +154,12 @@ curl -X POST "http://localhost:8000/destroy_sandbox?sandbox_id=<sandbox_id>" \
 ```
 ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
 │   PowerShell    │    │   MCP Server    │    │      k3d        │
-│   Scripts       │───▶│   (FastAPI)     │───▶│   Clusters      │
+│   Scripts       │───▶│   (FastAPI)    │ ──▶│   Clusters      │
 │                 │    │                 │    │                 │
 │ • create_approve│    │ • Sandbox Mgmt  │    │ • Ephemeral K8s │
-│   _test.ps1     │    │ • Approval Flow  │    │ • Auto Cleanup  │
+│   _test.ps1     │    │ • Approval Flow │    │ • Auto Cleanup  │
 │ • destroy_latest│    │ • Kubeconfig    │    │                 │
-│   .ps1         │    │ • Testing        │    └─────────────────┘
+│   .ps1          │    │ • Testing       │    └─────────────────┘
 └─────────────────┘    │ • Metrics       │
                        │ • Audit Log     │
                        └─────────────────┘
