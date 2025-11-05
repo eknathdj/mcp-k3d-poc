@@ -1,69 +1,127 @@
-import { createMCPServer } from "mcp-use/server";
-import { z } from "zod";
+// server.ts — Official SDK server wrapping your FastAPI sandbox
+import express from "express";
 import fetch from "node-fetch";
+import { z } from "zod";
+import {
+  McpServer,
+} from "@modelcontextprotocol/sdk/server/mcp.js";
+import { StreamableHTTPServerTransport }
+  from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 
+// === Config (reuse your FastAPI sandbox) ===
 const BASE = process.env.SANDBOX_BASE ?? "http://localhost:8000";
-const AUTH = process.env.SANDBOX_BEARER ?? "";
+const AUTH = process.env.SANDBOX_BEARER ?? ""; // e.g., "Bearer super-secret-poctoken"
 
-async function callREST(path, init = {}) {
-  const headers = { "Content-Type": "application/json", ...(init.headers || {}) };
+// Helper to call FastAPI
+async function callREST(path: string, init: RequestInit = {}) {
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    ...(init.headers as Record<string, string> ?? {}),
+  };
   if (AUTH) headers["Authorization"] = AUTH;
+
   const res = await fetch(`${BASE}${path}`, { ...init, headers });
-  if (!res.ok) throw new Error(await res.text());
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`HTTP ${res.status} ${path}: ${text}`);
+  }
   return res.json();
 }
 
-const server = createMCPServer("mcp-sandbox-proxy", {
+// === Wire up SDK server ===
+const mcp = new McpServer({
+  name: "mcp-sandbox-proxy",
   version: "0.1.0",
-  description: "MCP wrapper for k3d sandbox PoC",
+  description: "MCP proxy for k3d sandbox PoC",
 });
 
-server.tool("create_sandbox", {
-  description: "Create sandbox",
-  parameters: z.object({
-    name: z.string(),
-    servers: z.number().default(1),
-    agents: z.number().default(1),
-    ttl_minutes: z.number().default(60),
-    owner: z.string().default("you@example.com"),
-  }),
-  execute: (p) => callREST("/create_sandbox", { method: "POST", body: JSON.stringify(p) }),
+// === Define MCP tools ===
+mcp.tool("create_sandbox", "Create ephemeral k3d sandbox", {
+  type: "object",
+  properties: {
+    name: { type: "string" },
+    servers: { type: "number", default: 1 },
+    agents: { type: "number", default: 1 },
+    ttl_minutes: { type: "number", default: 60 },
+    owner: { type: "string", default: "you@example.com" },
+  },
+  required: ["name"],
+}, async (args) => {
+  const body = JSON.stringify(args);
+  const out = await callREST("/create_sandbox", { method: "POST", body });
+  return { content: [{ type: "text", text: JSON.stringify(out) }] };
 });
 
-server.tool("approve", {
-  description: "Approve sandbox",
-  parameters: z.object({
-    approval_id: z.string(),
-    approver: z.string().default("you@example.com"),
-  }),
-  execute: (p) =>
-    callREST(`/approve?approval_id=${encodeURIComponent(p.approval_id)}&approver=${encodeURIComponent(p.approver)}`, { method: "POST" }),
+mcp.tool("approve", "Approve a pending sandbox request", {
+  type: "object",
+  properties: {
+    approval_id: { type: "string" },
+    approver: { type: "string", default: "you@example.com" },
+  },
+  required: ["approval_id"],
+}, async (args) => {
+  const out = await callREST(
+    `/approve?approval_id=${encodeURIComponent(args.approval_id)}&approver=${encodeURIComponent(args.approver ?? "you@example.com")}`,
+    { method: "POST" }
+  );
+  return { content: [{ type: "text", text: JSON.stringify(out) }] };
 });
 
-server.tool("get_status", {
-  description: "Get status",
-  parameters: z.object({ sandbox_id: z.string() }),
-  execute: (p) => callREST(`/get_sandbox_status/${encodeURIComponent(p.sandbox_id)}`),
+mcp.tool("get_status", "Get sandbox status", {
+  type: "object",
+  properties: { sandbox_id: { type: "string" } },
+  required: ["sandbox_id"],
+}, async (args) => {
+  const out = await callREST(`/get_sandbox_status/${encodeURIComponent(args.sandbox_id)}`);
+  return { content: [{ type: "text", text: JSON.stringify(out) }] };
 });
 
-server.tool("get_kubeconfig", {
-  description: "Get kubeconfig",
-  parameters: z.object({ sandbox_id: z.string() }),
-  execute: (p) => callREST(`/get_kubeconfig/${encodeURIComponent(p.sandbox_id)}`),
+mcp.tool("get_kubeconfig", "Fetch kubeconfig for sandbox", {
+  type: "object",
+  properties: { sandbox_id: { type: "string" } },
+  required: ["sandbox_id"],
+}, async (args) => {
+  const out = await callREST(`/get_kubeconfig/${encodeURIComponent(args.sandbox_id)}`);
+  return { content: [{ type: "text", text: JSON.stringify(out) }] };
 });
 
-server.tool("run_test", {
-  description: "Run test",
-  parameters: z.object({ sandbox_id: z.string(), test_id: z.string().default("smoke") }),
-  execute: (p) => callREST("/run_test", { method: "POST", body: JSON.stringify(p) }),
+mcp.tool("run_test", "Run smoke test on sandbox", {
+  type: "object",
+  properties: {
+    sandbox_id: { type: "string" },
+    test_id: { type: "string", default: "smoke" },
+  },
+  required: ["sandbox_id"],
+}, async (args) => {
+  const body = JSON.stringify(args);
+  const out = await callREST("/run_test", { method: "POST", body });
+  return { content: [{ type: "text", text: JSON.stringify(out) }] };
 });
 
-server.tool("destroy_sandbox", {
-  description: "Destroy sandbox",
-  parameters: z.object({ sandbox_id: z.string() }),
-  execute: (p) => callREST("/destroy_sandbox", { method: "POST", body: JSON.stringify(p) }),
+mcp.tool("destroy_sandbox", "Destroy a sandbox cluster", {
+  type: "object",
+  properties: { sandbox_id: { type: "string" } },
+  required: ["sandbox_id"],
+}, async (args) => {
+  const body = JSON.stringify(args);
+  const out = await callREST("/destroy_sandbox", { method: "POST", body });
+  return { content: [{ type: "text", text: JSON.stringify(out) }] };
 });
 
+// Express + streamable HTTP transport for SSE
+const app = express();
+const transport = new StreamableHTTPServerTransport(app);
+
+// Connect MCP server to transport
+await mcp.connect(transport);
+
+// Set up SSE routes manually
+app.get('/sse', (req, res) => transport.handleGetRequest(req, res));
+app.post('/sse', express.json(), (req, res) => transport.handlePostRequest(req, res));
+
+// Start the Express server
 const PORT = Number(process.env.PORT ?? 3000);
-server.listen(PORT);
-console.log(`MCP server running: http://localhost:${PORT}/inspector`);
+app.listen(PORT, () => {
+  console.log(`✅ MCP server ready on http://localhost:${PORT}/sse`);
+  console.log(`👉 Use MCP Inspector to connect to this SSE endpoint.`);
+});
