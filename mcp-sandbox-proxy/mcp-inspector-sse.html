@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MCP Inspector - SSE Connection</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        .status {
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px 0;
+        }
+        .success { background-color: #d4edda; border: 1px solid #c3e6cb; color: #155724; }
+        .error { background-color: #f8d7da; border: 1px solid #f5c6cb; color: #721c24; }
+        .info { background-color: #d1ecf1; border: 1px solid #bee5eb; color: #0c5460; }
+        button {
+            background-color: #007cba;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover { background-color: #005a87; }
+        .tool-result {
+            background-color: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 4px;
+            padding: 10px;
+            margin-top: 10px;
+            white-space: pre-wrap;
+            font-family: monospace;
+            font-size: 12px;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🌐 MCP Inspector - SSE Connection Test</h1>
+        <p>Testing connection to MCP SSE server via ngrok</p>
+        
+        <div class="info">
+            <strong>ngrok URL:</strong> https://4e79a3946546.ngrok-free.app/sse<br>
+            <strong>Transport:</strong> SSE (Server-Sent Events)<br>
+            <strong>Status:</strong> <span id="connection-status">Checking...</span>
+        </div>
+    </div>
+
+    <div class="container">
+        <h2>🧪 Test MCP Tools</h2>
+        
+        <button onclick="testCreateSandbox()">Create Sandbox</button>
+        <button onclick="testApprove()">Approve</button>
+        <button onclick="testGetStatus()">Get Status</button>
+        <button onclick="testListActive()">List Active</button>
+        <button onclick="testDestroy()">Destroy</button>
+        
+        <div id="tool-results" class="tool-result" style="display:none;"></div>
+    </div>
+
+    <div class="container">
+        <h2>📋 Instructions for MCP Inspector</h2>
+        <ol>
+            <li><strong>Open MCP Inspector</strong> (if you have it installed separately)</li>
+            <li><strong>Select Transport Type:</strong> SSE</li>
+            <li><strong>Enter URL:</strong> <code>https://4e79a3946546.ngrok-free.app/sse</code></li>
+            <li><strong>Connect</strong> and test the tools</li>
+        </ol>
+        
+        <div class="info">
+            <strong>Note:</strong> This page provides a simple test interface. For full MCP Inspector functionality, 
+            use the official MCP Inspector with the SSE transport configuration above.
+        </div>
+    </div>
+
+    <script>
+        const NGROK_URL = 'https://4e79a3946546.ngrok-free.app';
+        
+        // Simple HTTP-based testing (not full MCP protocol)
+        async function apiCall(endpoint, method = 'GET', body = null) {
+            try {
+                const options = {
+                    method,
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'ngrok-skip-browser-warning': 'true'
+                    }
+                };
+                
+                if (body) {
+                    options.body = JSON.stringify(body);
+                }
+                
+                const response = await fetch(`http://localhost:8000${endpoint}`, options);
+                const result = await response.json();
+                
+                if (!response.ok) {
+                    throw new Error(`${response.status}: ${JSON.stringify(result)}`);
+                }
+                
+                return result;
+            } catch (error) {
+                throw new Error(`API Error: ${error.message}`);
+            }
+        }
+        
+        function showResult(data, isError = false) {
+            const element = document.getElementById('tool-results');
+            element.style.display = 'block';
+            element.className = `tool-result ${isError ? 'error' : 'success'}`;
+            element.textContent = typeof data === 'string' ? data : JSON.stringify(data, null, 2);
+        }
+        
+        async function testCreateSandbox() {
+            try {
+                showResult('Creating sandbox...', false);
+                const result = await apiCall('/create_sandbox', 'POST', {
+                    name: `ngrok-test-${Date.now()}`,
+                    servers: 1,
+                    agents: 1,
+                    ttl_minutes: 30,
+                    owner: 'ngrok-test@example.com'
+                });
+                showResult(result);
+                
+                // Store for other tests
+                window.lastSandbox = result;
+            } catch (error) {
+                showResult(error.message, true);
+            }
+        }
+        
+        async function testApprove() {
+            try {
+                if (!window.lastSandbox) {
+                    showResult('Please create a sandbox first', true);
+                    return;
+                }
+                
+                showResult('Approving sandbox...', false);
+                const result = await apiCall(`/approve?approval_id=${window.lastSandbox.approval_id}&approver=ngrok-test@example.com`, 'POST');
+                showResult(result);
+            } catch (error) {
+                showResult(error.message, true);
+            }
+        }
+        
+        async function testGetStatus() {
+            try {
+                if (!window.lastSandbox) {
+                    showResult('Please create a sandbox first', true);
+                    return;
+                }
+                
+                showResult('Getting status...', false);
+                const result = await apiCall(`/get_sandbox_status/${window.lastSandbox.sandbox_id}`);
+                showResult(result);
+            } catch (error) {
+                showResult(error.message, true);
+            }
+        }
+        
+        async function testListActive() {
+            try {
+                showResult('Listing active sandboxes...', false);
+                const result = await apiCall('/list_active_sandboxes');
+                showResult(result);
+            } catch (error) {
+                showResult(error.message, true);
+            }
+        }
+        
+        async function testDestroy() {
+            try {
+                if (!window.lastSandbox) {
+                    showResult('Please create a sandbox first', true);
+                    return;
+                }
+                
+                showResult('Destroying sandbox...', false);
+                const result = await apiCall(`/destroy_sandbox?sandbox_id=${window.lastSandbox.sandbox_id}`, 'POST');
+                showResult(result);
+            } catch (error) {
+                showResult(error.message, true);
+            }
+        }
+        
+        // Check connection status
+        async function checkConnection() {
+            try {
+                const response = await fetch(`${NGROK_URL}/health`, {
+                    headers: { 'ngrok-skip-browser-warning': 'true' }
+                });
+                
+                if (response.ok) {
+                    const health = await response.json();
+                    document.getElementById('connection-status').textContent = '✅ Connected via ngrok';
+                    document.getElementById('connection-status').style.color = 'green';
+                } else {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+            } catch (error) {
+                document.getElementById('connection-status').textContent = '❌ Connection failed';
+                document.getElementById('connection-status').style.color = 'red';
+            }
+        }
+        
+        // Initialize
+        checkConnection();
+    </script>
+</body>
+</html>
