@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>k3d Sandbox MCP Client</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        .tool-section {
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 15px;
+            margin-bottom: 15px;
+        }
+        .tool-title {
+            font-size: 18px;
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 10px;
+        }
+        input, select, button {
+            padding: 8px;
+            margin: 5px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        button {
+            background-color: #007cba;
+            color: white;
+            cursor: pointer;
+            font-weight: bold;
+        }
+        button:hover {
+            background-color: #005a87;
+        }
+        .result {
+            background-color: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 4px;
+            padding: 10px;
+            margin-top: 10px;
+            white-space: pre-wrap;
+            font-family: monospace;
+            font-size: 12px;
+        }
+        .success { border-left: 4px solid #28a745; }
+        .error { border-left: 4px solid #dc3545; }
+        .info { border-left: 4px solid #17a2b8; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🚀 k3d Sandbox MCP Client</h1>
+        <p>This web interface demonstrates the MCP tools for managing k3d sandboxes.</p>
+        <p><strong>Status:</strong> <span id="connection-status">Checking...</span></p>
+    </div>
+
+    <div class="container tool-section">
+        <div class="tool-title">📝 Create Sandbox</div>
+        <input type="text" id="create-name" placeholder="Sandbox name (required)" value="demo-sandbox">
+        <input type="number" id="create-servers" placeholder="Servers" value="1" min="1">
+        <input type="number" id="create-agents" placeholder="Agents" value="1" min="0">
+        <input type="number" id="create-ttl" placeholder="TTL (minutes)" value="60" min="5">
+        <input type="text" id="create-owner" placeholder="Owner email" value="demo@example.com">
+        <button onclick="createSandbox()">Create Sandbox</button>
+        <div id="create-result" class="result" style="display:none;"></div>
+    </div>
+
+    <div class="container tool-section">
+        <div class="tool-title">✅ Approve Sandbox</div>
+        <input type="text" id="approve-id" placeholder="Approval ID">
+        <input type="text" id="approve-email" placeholder="Approver email" value="approver@example.com">
+        <button onclick="approveSandbox()">Approve</button>
+        <div id="approve-result" class="result" style="display:none;"></div>
+    </div>
+
+    <div class="container tool-section">
+        <div class="tool-title">📊 Get Status</div>
+        <input type="text" id="status-id" placeholder="Sandbox ID">
+        <button onclick="getStatus()">Get Status</button>
+        <div id="status-result" class="result" style="display:none;"></div>
+    </div>
+
+    <div class="container tool-section">
+        <div class="tool-title">📋 Get Kubeconfig</div>
+        <input type="text" id="kubeconfig-id" placeholder="Sandbox ID">
+        <button onclick="getKubeconfig()">Get Kubeconfig</button>
+        <div id="kubeconfig-result" class="result" style="display:none;"></div>
+    </div>
+
+    <div class="container tool-section">
+        <div class="tool-title">🧪 Run Test</div>
+        <input type="text" id="test-sandbox-id" placeholder="Sandbox ID">
+        <select id="test-type">
+            <option value="smoke">Smoke Test</option>
+        </select>
+        <button onclick="runTest()">Run Test</button>
+        <div id="test-result" class="result" style="display:none;"></div>
+    </div>
+
+    <div class="container tool-section">
+        <div class="tool-title">📋 List Active Sandboxes</div>
+        <button onclick="listSandboxes()">List Active</button>
+        <div id="list-result" class="result" style="display:none;"></div>
+    </div>
+
+    <div class="container tool-section">
+        <div class="tool-title">🧹 Destroy Sandbox</div>
+        <input type="text" id="destroy-id" placeholder="Sandbox ID">
+        <button onclick="destroySandbox()">Destroy</button>
+        <div id="destroy-result" class="result" style="display:none;"></div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:8000';
+        
+        async function apiCall(endpoint, method = 'GET', body = null) {
+            try {
+                const options = {
+                    method,
+                    headers: { 'Content-Type': 'application/json' }
+                };
+                
+                if (body) {
+                    options.body = JSON.stringify(body);
+                }
+                
+                const response = await fetch(`${API_BASE}${endpoint}`, options);
+                const result = await response.json();
+                
+                if (!response.ok) {
+                    throw new Error(`${response.status}: ${JSON.stringify(result)}`);
+                }
+                
+                return result;
+            } catch (error) {
+                throw new Error(`API Error: ${error.message}`);
+            }
+        }
+        
+        function showResult(elementId, data, isError = false) {
+            const element = document.getElementById(elementId);
+            element.style.display = 'block';
+            element.className = `result ${isError ? 'error' : 'success'}`;
+            element.textContent = typeof data === 'string' ? data : JSON.stringify(data, null, 2);
+        }
+        
+        async function createSandbox() {
+            try {
+                const result = await apiCall('/create_sandbox', 'POST', {
+                    name: document.getElementById('create-name').value,
+                    servers: parseInt(document.getElementById('create-servers').value),
+                    agents: parseInt(document.getElementById('create-agents').value),
+                    ttl_minutes: parseInt(document.getElementById('create-ttl').value),
+                    owner: document.getElementById('create-owner').value
+                });
+                showResult('create-result', result);
+                
+                // Auto-fill approval ID
+                document.getElementById('approve-id').value = result.approval_id;
+                document.getElementById('status-id').value = result.sandbox_id;
+            } catch (error) {
+                showResult('create-result', error.message, true);
+            }
+        }
+        
+        async function approveSandbox() {
+            try {
+                const approvalId = document.getElementById('approve-id').value;
+                const approver = document.getElementById('approve-email').value;
+                const result = await apiCall(`/approve?approval_id=${approvalId}&approver=${approver}`, 'POST');
+                showResult('approve-result', result);
+                
+                // Auto-fill sandbox ID for other operations
+                document.getElementById('kubeconfig-id').value = result.sandbox_id;
+                document.getElementById('test-sandbox-id').value = result.sandbox_id;
+                document.getElementById('destroy-id').value = result.sandbox_id;
+            } catch (error) {
+                showResult('approve-result', error.message, true);
+            }
+        }
+        
+        async function getStatus() {
+            try {
+                const sandboxId = document.getElementById('status-id').value;
+                const result = await apiCall(`/get_sandbox_status/${sandboxId}`);
+                showResult('status-result', result);
+            } catch (error) {
+                showResult('status-result', error.message, true);
+            }
+        }
+        
+        async function getKubeconfig() {
+            try {
+                const sandboxId = document.getElementById('kubeconfig-id').value;
+                const result = await apiCall(`/get_kubeconfig/${sandboxId}`);
+                showResult('kubeconfig-result', result);
+            } catch (error) {
+                showResult('kubeconfig-result', error.message, true);
+            }
+        }
+        
+        async function runTest() {
+            try {
+                const result = await apiCall('/run_test', 'POST', {
+                    sandbox_id: document.getElementById('test-sandbox-id').value,
+                    test_id: document.getElementById('test-type').value
+                });
+                showResult('test-result', result);
+            } catch (error) {
+                showResult('test-result', error.message, true);
+            }
+        }
+        
+        async function listSandboxes() {
+            try {
+                const result = await apiCall('/list_active_sandboxes');
+                showResult('list-result', result);
+            } catch (error) {
+                showResult('list-result', error.message, true);
+            }
+        }
+        
+        async function destroySandbox() {
+            try {
+                const sandboxId = document.getElementById('destroy-id').value;
+                const result = await apiCall(`/destroy_sandbox?sandbox_id=${sandboxId}`, 'POST');
+                showResult('destroy-result', result);
+            } catch (error) {
+                showResult('destroy-result', error.message, true);
+            }
+        }
+        
+        // Check connection status
+        async function checkConnection() {
+            try {
+                await apiCall('/.well-known/mcp-manifest');
+                document.getElementById('connection-status').textContent = '✅ Connected to FastAPI server';
+                document.getElementById('connection-status').style.color = 'green';
+            } catch (error) {
+                document.getElementById('connection-status').textContent = '❌ Cannot connect to server';
+                document.getElementById('connection-status').style.color = 'red';
+            }
+        }
+        
+        // Initialize
+        checkConnection();
+    </script>
+</body>
+</html>
